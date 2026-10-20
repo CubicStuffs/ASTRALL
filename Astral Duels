@@ -223,6 +223,7 @@ Config = {
 	stealToggled = false,
 	medusaCounterEnabled = false,
 	batAimbotToggled = false,
+	mirrorTpDownEnabled = true,
 	autoSwingEnabled = false,
 	autoStealEnabled = false,
 	batLaggerToggled = false,
@@ -3660,6 +3661,7 @@ local function fn31()
 		duelAntiDieEnabled = Config.duelAntiDieEnabled or false,
 		autoDeathReset = Config.autoDeathResetEnabled or false,
 		batAimbotToggled = Config.batAimbotToggled,
+		mirrorTpDownEnabled = Config.mirrorTpDownEnabled,
 		autoSwingEnabled = Config.autoSwingEnabled or false,
 		autoStealEnabled = Config.autoStealEnabled,
 		autoStealStopWhenHit = Config.autoStealStopWhenHit == true,
@@ -3812,6 +3814,7 @@ local function fn33()
 		potatoGraphics = Config.potatoGraphicsEnabled,
 		medusaCounter = Config.medusaCounterEnabled,
 		batAimbotToggled = Config.batAimbotToggled,
+		mirrorTpDownEnabled = Config.mirrorTpDownEnabled,
 		autoSwingEnabled = Config.autoSwingEnabled or false,
 		autoStealEnabled = Config.autoStealEnabled,
 		autoStealStopWhenHit = Config.autoStealStopWhenHit == true,
@@ -4582,6 +4585,9 @@ local function fn39()
 	Config.antiFlingEnabled = true
 	if v23.batAimbotToggled ~= nil then
 		Config.batAimbotToggled = v23.batAimbotToggled
+	end
+	if v23.mirrorTpDownEnabled ~= nil then
+		Config.mirrorTpDownEnabled = v23.mirrorTpDownEnabled
 	end
 	if v23.autoSwingEnabled ~= nil then
 		Config.autoSwingEnabled = v23.autoSwingEnabled == true
@@ -14295,6 +14301,116 @@ tbl31 = {
 				aimbot.ZIndex = 5
 				aimbot.BorderSizePixel = 0
 				aimbot.MouseButton1Click:Connect(toggleBatAimbotToggled)
+			end
+			do
+				local mirrorTpDownEnabled, frame7 = Config.mirrorTpDownEnabled == true, Instance.new("Frame", frame6)
+				frame7.Size = UDim2.new(1, 0, 0, 40)
+				frame7.BorderSizePixel = 0
+				frame7.LayoutOrder = 2
+				frame7.BackgroundColor3 = mirrorTpDownEnabled and glass.panelHover or glass.panel
+				frame7.BackgroundTransparency = 0.4
+				mkCorner(frame7, 10)
+				mkAnimStroke(frame7, 1)
+				local textLabel2 = Instance.new("TextLabel", frame7)
+				textLabel2.Size = UDim2.new(1, -54, 1, 0)
+				textLabel2.Position = UDim2.new(0, 14, 0, 0)
+				textLabel2.BackgroundTransparency = 1
+				textLabel2.Text = "Mirror TP Down"
+				textLabel2.TextColor3 = mirrorTpDownEnabled and glass.text or glass.muted
+				textLabel2.Font = Enum.Font.GothamBold
+				textLabel2.TextSize = 12
+				textLabel2.TextXAlignment = Enum.TextXAlignment.Left
+				
+				local mirrorHeights = {}
+				local mirrorLastTP  = 0
+				local mirrorConn    = nil
+				local MirrorRange           = 8
+				local MirrorDropThreshold   = 3
+				local MirrorCooldown        = 0.08
+
+				local function mirrorTPDown()
+					local character = localPlayer.Character
+					if not character then return end
+					local hrp = character:FindFirstChild("HumanoidRootPart")
+					local hum = character:FindFirstChildOfClass("Humanoid")
+					if not hrp or not hum or hum.Health <= 0 then return end
+
+					local _, yRot = hrp.CFrame:ToEulerAnglesYXZ()
+					pcall(function()
+						hrp.CFrame = CFrame.new(hrp.Position.X, -7, hrp.Position.Z) * CFrame.Angles(0, yRot, 0)
+						hrp.AssemblyLinearVelocity = Vector3.zero
+						hrp.Velocity = Vector3.zero
+					end)
+				end
+
+				local function mirrorScan()
+					local now = tick()
+					if now - mirrorLastTP < MirrorCooldown then return end
+
+					local character = localPlayer.Character
+					local myHRP = character and character:FindFirstChild("HumanoidRootPart")
+					if not myHRP then return end
+
+					local rangeSq = MirrorRange * MirrorRange
+
+					for _, player in ipairs(Players:GetPlayers()) do
+						if player ~= localPlayer and player.Character then
+							local theirHRP = player.Character:FindFirstChild("HumanoidRootPart")
+							local theirHum = player.Character:FindFirstChildOfClass("Humanoid")
+
+							if theirHRP and theirHum and theirHum.Health > 0 then
+								local dx = theirHRP.Position.X - myHRP.Position.X
+								local dz = theirHRP.Position.Z - myHRP.Position.Z
+
+								if dx * dx + dz * dz <= rangeSq then
+									local y    = theirHRP.Position.Y
+									local prev = mirrorHeights[player.UserId]
+
+									if prev and (prev - y) >= MirrorDropThreshold then
+										mirrorLastTP = now
+										mirrorTPDown()
+										table.clear(mirrorHeights)
+										return
+									end
+									mirrorHeights[player.UserId] = y
+								else
+									mirrorHeights[player.UserId] = nil
+								end
+							end
+						end
+					end
+				end
+
+				local function mirrorEnable()
+					if mirrorConn then return end
+					mirrorHeights = {}
+					mirrorLastTP  = 0
+					mirrorConn = RunService.Heartbeat:Connect(mirrorScan)
+				end
+
+				local function mirrorDisable()
+					if mirrorConn then
+						pcall(function() mirrorConn:Disconnect() end)
+						mirrorConn = nil
+					end
+					mirrorHeights = {}
+					mirrorLastTP  = 0
+				end
+				
+				local function setToggle(arg)
+					mirrorTpDownEnabled = arg
+					Config.mirrorTpDownEnabled = arg
+					textLabel2.TextColor3 = arg and glass.text or glass.muted
+					TweenService:Create(frame7, TweenInfo.new(0.15), { BackgroundColor3 = arg and glass.panelHover or glass.panel }):Play()
+					if arg then mirrorEnable() else mirrorDisable() end
+					fn34()
+				end
+
+				mkSwitch(frame7, mirrorTpDownEnabled, setToggle).Position = UDim2.new(1, -50, 0.5, -12)
+				
+				if mirrorTpDownEnabled then
+					mirrorEnable()
+				end
 			end
 			do
 				local flag14, frame7 = Config.autoSwingEnabled == true, Instance.new("Frame", frame6)
